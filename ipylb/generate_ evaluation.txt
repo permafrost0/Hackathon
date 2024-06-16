@@ -1,0 +1,142 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+import joblib
+
+# バケット名とファイル名を指定
+local_file_name = 'train.csv'
+
+# ダウンロードしたファイルをPandas DataFrameに読み込む
+df = pd.read_csv(local_file_name)
+
+# ターゲットカラムの指定
+target_column = 'evaluation'  # 例として'target'というカラム名
+
+# 特徴量とターゲットに分割
+X = df.drop(target_column, axis=1)
+y = df[target_column]
+
+# データの前処理
+# 例: 欠損値の処理（ここでは平均値で補完）
+X.fillna(X.mean(), inplace=True)
+
+# カテゴリ変数のエンコード
+X = pd.get_dummies(X)
+
+# スケーリング
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# 訓練データとテストデータに分割
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+# モデルのトレーニング
+model = RandomForestClassifier()
+model.fit(X_train, y_train)
+
+# 予測
+y_pred = model.predict(X_test)
+
+# 精度の評価
+accuracy = accuracy_score(y_test, y_pred)
+print(f'Accuracy: {accuracy:.2f}')
+
+# モデルの保存
+model_filename = 'model.pkl'
+joblib.dump(model, model_filename)
+print(f'Model saved as {model_filename}')
+
+
+--------------------------------------
+
+
+
+import pandas as pd
+import numpy as np
+import joblib
+
+# 手打ちで入力したデータを複数作成（例として3つのサンプルデータを作成）
+input_data = [
+    {
+        "Positive": 0.1479329705238342,
+        "Negative": 0.20235931854695081,
+        "Neutral": 0.1448831171,
+        "Mixed": 0.3048245974,
+        "flesch_reading_ease": 72.36,
+        "flesch_kincaid_grade": 8.1,
+        "gunning_fog": 10.85,
+        "automated_readability_index": 8,
+        "coleman_liau_index": 8.41,
+        "linsear_write_formula": 8.7,
+        "lexicon_count": 79,
+        "sentence_count": 15
+    },
+    {
+        "Positive": 0.1123456789,
+        "Negative": 0.3456789012,
+        "Neutral": 0.1234567890,
+        "Mixed": 0.2345678901,
+        "flesch_reading_ease": 65.43,
+        "flesch_kincaid_grade": 9.2,
+        "gunning_fog": 11.5,
+        "automated_readability_index": 9,
+        "coleman_liau_index": 7.89,
+        "linsear_write_formula": 7.2,
+        "lexicon_count": 92,
+        "sentence_count": 12
+    },
+    {
+        "Positive": 0.1987654321,
+        "Negative": 0.1234567890,
+        "Neutral": 0.2345678901,
+        "Mixed": 0.3456789012,
+        "flesch_reading_ease": 68.21,
+        "flesch_kincaid_grade": 7.5,
+        "gunning_fog": 9.8,
+        "automated_readability_index": 7.5,
+        "coleman_liau_index": 9.12,
+        "linsear_write_formula": 8.0,
+        "lexicon_count": 84,
+        "sentence_count": 18
+    }
+]
+
+# データフレームに変換
+input_df = pd.DataFrame(input_data)
+
+# カテゴリ変数のエンコード
+input_df_encoded = pd.get_dummies(input_df)
+
+# モデルファイルのパス
+model_filename = 'model.pkl'
+
+# モデルのロード
+model = joblib.load(model_filename)
+
+# 入力データのスケーリング（前提として、モデルの訓練時に行ったスケーリングと同じスケーラーを使用する）
+# ここではダミーのスケーラーを作成する例を示します
+from sklearn.preprocessing import StandardScaler
+
+# カテゴリ変数のダミースケーリング
+dummy_scaler = StandardScaler()
+dummy_scaler.fit(input_df_encoded)  # ダミーでフィットさせる
+
+# 入力データのスケーリング
+input_scaled = dummy_scaler.transform(input_df_encoded)
+
+# 予測確率の取得
+probabilities = model.predict_proba(input_scaled)
+
+# クラスラベルの取得
+predicted_classes = model.predict(input_scaled)
+
+# 各データの予測結果の詳細表示
+for i in range(len(input_data)):
+    print(f"サンプル{i+1}の予測結果:")
+    print("予測クラス:", predicted_classes[i])
+    print("各クラスの予測確率:")
+    for class_idx, prob in enumerate(probabilities[i]):
+        print(f"クラス {class_idx}: {prob:.4f}")
+    print()
