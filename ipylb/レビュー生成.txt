@@ -1,0 +1,162 @@
+!pip install pandas torch transformers
+
+
+
+import pandas as pd
+from transformers import GPT2Tokenizer
+from torch.utils.data import Dataset, DataLoader
+import torch
+import joblib
+from transformers import GPT2LMHeadModel, AdamW
+
+# 評価データの読み込み
+score_df = pd.read_csv('score.csv')
+
+# レビューデータの読み込み
+with open('review.txt', 'r') as file:
+    reviews = file.readlines()
+
+# スコアの重みづけ
+def weight_score(score):
+    if score == 4:
+        return score
+    elif score == 3:
+        return score
+    elif score == 2:
+        return score
+    return 0
+
+# スコアに重みづけを適用
+score_df['weighted_score'] = score_df['score'].apply(weight_score)
+
+# 重みづけされたスコアとレビューをペアリング
+data = pd.DataFrame({
+    'score': score_df['weighted_score'],
+    'review': reviews
+})
+
+# データの表示
+data.head()
+
+# トークナイザーのロード
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+
+# パディングトークンを設定
+tokenizer.pad_token = tokenizer.eos_token
+
+class ReviewDataset(Dataset):
+    def __init__(self, data, tokenizer):
+        self.data = data
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        score = str(self.data.iloc[idx, 0])
+        review = str(self.data.iloc[idx, 1])
+        inputs = self.tokenizer.encode(f'{score} <|review|> {review}', return_tensors='pt', max_length=512, truncation=True)
+        return inputs.squeeze(), inputs.squeeze()
+
+# データセットのインスタンス作成
+dataset = ReviewDataset(data, tokenizer)
+
+# カスタムcollate関数の定義
+def collate_fn(batch):
+    inputs, labels = zip(*batch)
+    inputs = torch.nn.utils.rnn.pad_sequence(inputs, batch_first=True, padding_value=tokenizer.pad_token_id)
+    labels = torch.nn.utils.rnn.pad_sequence(labels, batch_first=True, padding_value=tokenizer.pad_token_id)
+    return inputs, labels
+
+# データローダーの作成
+dataloader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=collate_fn)
+
+# モデルのロード
+model = GPT2LMHeadModel.from_pretrained('gpt2')
+
+# デバイスの設定 (GPUが利用可能ならGPUを使用)
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+model.to(device)
+
+# オプティマイザの定義
+optimizer = AdamW(model.parameters(), lr=5e-5)
+
+# トレーニングループ
+model.train()
+num_epochs = 5
+
+for epoch in range(num_epochs):
+    for batch in dataloader:
+        inputs, labels = batch
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(inputs, labels=labels)
+        loss = outputs.loss
+        loss.backward()
+        optimizer.step()
+
+        print(f'Epoch: {epoch}, Loss: {loss.item()}')
+
+
+def generate_review(score):
+    prompt = f'{score} <|review|>'
+    inputs = tokenizer.encode(prompt, return_tensors='pt')
+    inputs = inputs.to(device)
+    outputs = model.generate(inputs, max_length=50, num_return_sequences=1)
+    review = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return review
+
+# 任意の評価に対するレビューを生成
+score = 3
+generated_review = generate_review(score)
+print(f'Generated review for score {score}: {generated_review}')
+
+
+///
+
+    保存
+
+///
+
+# モデルをpklファイルとして保存
+model_path = "model_review.pkl"
+torch.save(model.state_dict(), model_path)
+
+///
+
+    使用
+
+///
+
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+import torch
+
+# モデルとトークナイザーの定義
+model = GPT2LMHeadModel.from_pretrained('gpt2')
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+
+# 学習済みパラメータの読み込み
+model_path = "model_review.pkl"
+model.load_state_dict(torch.load(model_path))
+
+# デバイスの設定 (GPUが利用可能ならGPUを使用)
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+model.to(device)
+
+# モデルを評価モードに設定
+# model.eval()
+
+def generate_review(score):
+    prompt = f'{score} '
+    inputs = tokenizer.encode(prompt, return_tensors='pt')
+    inputs = inputs.to(device)
+    outputs = model.generate(inputs, max_length=50, num_return_sequences=1)
+    review = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return review
+
+# 任意の評価に対するレビューを生成
+score = 4
+generated_review = generate_review(score)
+print(f'Generated review for score {score}: {generated_review}')
